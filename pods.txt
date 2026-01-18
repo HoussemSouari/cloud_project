@@ -1,0 +1,3 @@
+frontend : 2 pods
+postgres : 1 pod 
+backend : 2 pods 

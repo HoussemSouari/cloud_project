@@ -1,0 +1,183 @@
+# ============================================
+# Backend API Deployment
+# ============================================
+# This file contains all Kubernetes/OpenShift resources for Backend
+
+---
+# BuildConfig - Builds Docker image from source
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: backend-build
+  labels:
+    app: notes-app
+    tier: backend
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: backend:latest
+  source:
+    type: Binary  # Source code uploaded via 'oc start-build'
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  triggers: []  # Manual triggers only
+
+---
+# ImageStream - Stores built Docker images
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: backend
+  labels:
+    app: notes-app
+    tier: backend
+spec:
+  lookupPolicy:
+    local: true
+
+---
+# DeploymentConfig - Backend pod configuration
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: backend
+  labels:
+    app: notes-app
+    tier: backend
+spec:
+  replicas: 2  # Two backend pods for scalability
+  selector:
+    app: notes-app
+    tier: backend
+    deploymentconfig: backend
+  strategy:
+    type: Rolling  # Zero-downtime deployments
+    rollingParams:
+      updatePeriodSeconds: 1
+      intervalSeconds: 1
+      timeoutSeconds: 600
+      maxUnavailable: 25%
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app: notes-app
+        tier: backend
+        deploymentconfig: backend
+    spec:
+      containers:
+        - name: backend
+          image: backend:latest
+          imagePullPolicy: Always
+          
+          # Environment variables for database connection
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DB_HOST
+              value: postgres-service
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-password
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-name
+          
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          
+          # Resource limits
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+          
+          # Readiness probe
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 10
+  
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - backend
+        from:
+          kind: ImageStreamTag
+          name: backend:latest
+
+---
+# Service - Internal load balancer for backend
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  labels:
+    app: notes-app
+    tier: backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: notes-app
+    tier: backend
+    deploymentconfig: backend
+  sessionAffinity: None  # Round-robin load balancing
+
+---
+# Route - Exposes backend API to external access
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: backend-route
+  labels:
+    app: notes-app
+    tier: backend
+spec:
+  to:
+    kind: Service
+    name: backend-service
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge  # HTTPS termination at router
+    insecureEdgeTerminationPolicy: Redirect  # Force HTTPS
+  wildcardPolicy: None

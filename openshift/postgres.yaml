@@ -1,0 +1,151 @@
+# ============================================
+# PostgreSQL Database Deployment
+# ============================================
+# This file contains all Kubernetes/OpenShift resources for PostgreSQL
+
+---
+# PersistentVolumeClaim - Storage for database data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  labels:
+    app: notes-app
+    tier: database
+spec:
+  accessModes:
+    - ReadWriteOnce  # Can be mounted by one pod at a time
+  resources:
+    requests:
+      storage: 1Gi  # Request 1GB of persistent storage
+
+---
+# Secret - Database credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  labels:
+    app: notes-app
+    tier: database
+type: Opaque
+stringData:
+  database-user: notesuser
+  database-password: notespass
+  database-name: notesdb
+
+---
+# DeploymentConfig - PostgreSQL pod configuration
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: postgres
+  labels:
+    app: notes-app
+    tier: database
+spec:
+  replicas: 1  # Single database instance (NOT scalable for simplicity)
+  selector:
+    app: notes-app
+    tier: database
+    deploymentconfig: postgres
+  strategy:
+    type: Recreate  # Database must stop before starting new version
+  template:
+    metadata:
+      labels:
+        app: notes-app
+        tier: database
+        deploymentconfig: postgres
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:13-alpine
+          imagePullPolicy: IfNotPresent
+          
+          # Environment variables from Secret
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-name
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          
+          # Volume mount - THIS IS WHERE PERSISTENCE HAPPENS
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          
+          # Resource limits
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          
+          # Liveness probe - restart if unhealthy
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $POSTGRES_USER
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+          
+          # Readiness probe - don't send traffic until ready
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $POSTGRES_USER
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 10
+      
+      # Volume definition - links to PVC
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+
+---
+# Service - Internal network endpoint for database
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  labels:
+    app: notes-app
+    tier: database
+spec:
+  type: ClusterIP  # Internal only (not exposed to internet)
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgresql
+  selector:
+    app: notes-app
+    tier: database
+    deploymentconfig: postgres
