@@ -445,25 +445,11 @@ oc exec deployment/backend -- ping postgres-service
 
 **All requirements satisfied!** ✅
 
----
 
-## 🚀 Future Enhancements
-
-### Potential Improvements
-- [ ] Add authentication (user accounts)
-- [ ] Implement note editing/deletion
-- [ ] Add categories/tags for notes
-- [ ] Implement full-text search
-- [ ] Add CI/CD pipeline (GitHub Actions + OpenShift)
-- [ ] Implement PostgreSQL replication (HA)
-- [ ] Add monitoring (Prometheus + Grafana)
-- [ ] Implement caching layer (Redis)
-
----
 
 ## 👥 Authors
 
-- **IT460 Student**
+- **Houssem Souari**
 - **Course**: Cloud Computing (IT460)
 - **Project**: Multi-Container Application Development
 
@@ -473,27 +459,4 @@ oc exec deployment/backend -- ping postgres-service
 
 This project is created for educational purposes as part of the IT460 Cloud Computing course.
 
----
 
-## 🙏 Acknowledgments
-
-- OpenShift documentation and community
-- Node.js and React communities
-- PostgreSQL documentation
-- IT460 course instructors
-
----
-
-## 📞 Support
-
-For questions or issues:
-1. Check [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) troubleshooting section
-2. Review OpenShift logs: `oc logs <pod-name>`
-3. Check OpenShift events: `oc get events`
-4. Consult instructor or course materials
-
----
-
-**Last Updated**: January 17, 2026
-
-**Project Status**: ✅ Complete and Deployed

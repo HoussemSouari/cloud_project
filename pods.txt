@@ -1,3 +1,9 @@
 frontend : 2 pods
 postgres : 1 pod 
 backend : 2 pods 
+
+analytical_services : 2 pods 
+note-service : 3 pods
+share-service : 2 pods
+api-gateway : 2 pods
+rabbitmq : 1 pod

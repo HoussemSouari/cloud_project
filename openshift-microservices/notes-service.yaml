@@ -1,0 +1,133 @@
+# Notes Service Deployment
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: notes-service-build
+  labels:
+    app: notes-service
+spec:
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: notes-service:latest
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: notes-service
+  labels:
+    app: notes-service
+spec:
+  lookupPolicy:
+    local: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notes-service
+  labels:
+    app: notes-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: 8081
+      name: http
+  selector:
+    deploymentconfig: notes-service
+---
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  name: notes-service
+  labels:
+    app: notes-service
+spec:
+  replicas: 3
+  selector:
+    deploymentconfig: notes-service
+  strategy:
+    type: Rolling
+    rollingParams:
+      updatePeriodSeconds: 1
+      intervalSeconds: 1
+      timeoutSeconds: 600
+      maxUnavailable: 25%
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app: notes-service
+        deploymentconfig: notes-service
+    spec:
+      containers:
+        - name: notes-service
+          image: notes-service:latest
+          ports:
+            - containerPort: 8081
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8081"
+            - name: DB_HOST
+              value: "postgres-service"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-password
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: database-name
+            - name: RABBITMQ_URL
+              value: "amqp://admin:rabbitmq_pass@rabbitmq-service:5672"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - notes-service
+        from:
+          kind: ImageStreamTag
+          name: notes-service:latest
