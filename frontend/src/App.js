@@ -46,7 +46,8 @@ function App() {
     { name: 'Teal', value: '#14b8a6' }
   ];
 
-  const API_URL = process.env.REACT_APP_API_URL || 'https://backend-route-houssemsouari-dev.apps.rm2.thpm.p1.openshiftapps.com';
+  // API Gateway URL - all requests go through the gateway
+  const API_URL = process.env.REACT_APP_API_URL || 'https://api-gateway-route-houssemsouari-dev.apps.rm2.thpm.p1.openshiftapps.com';
 
   // Fetch notes from backend on component mount
   useEffect(() => {
@@ -115,7 +116,8 @@ function App() {
       const response = await fetch(`${API_URL}/api/stats`);
       if (response.ok) {
         const data = await response.json();
-        setStats(data);
+        // API returns {success: true, stats: {...}}
+        setStats(data.stats || data);
       }
     } catch (err) {
       console.error('Error fetching stats:', err);
@@ -127,7 +129,8 @@ function App() {
       const response = await fetch(`${API_URL}/api/analytics`);
       if (response.ok) {
         const data = await response.json();
-        setAnalytics(data);
+        // API returns {success: true, analytics: {...}}
+        setAnalytics(data.analytics || data);
       }
     } catch (err) {
       console.error('Error fetching analytics:', err);
@@ -308,12 +311,13 @@ function App() {
   };
 
   const getCategoryChartData = () => {
-    if (!stats || !stats.byCategory) return null;
+    // Use analytics.categoryDistribution instead of stats.byCategory
+    if (!analytics || !analytics.categoryDistribution) return null;
     
     return {
-      labels: stats.byCategory.map(c => c.category),
+      labels: analytics.categoryDistribution.map(c => c.category),
       datasets: [{
-        data: stats.byCategory.map(c => parseInt(c.count)),
+        data: analytics.categoryDistribution.map(c => parseInt(c.count)),
         backgroundColor: ['#667eea', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'],
       }]
     };
